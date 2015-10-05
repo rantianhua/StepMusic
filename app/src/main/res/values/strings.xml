@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">StepMusic</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="play_url_music">开始播放</string>
+</resources>
