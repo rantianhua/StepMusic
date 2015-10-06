@@ -1,7 +1,9 @@
 <resources>
     <string name="app_name">StepMusic</string>
-
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
     <string name="play_url_music">开始播放</string>
+    <string name="current_wifi">当前无线:%1$s</string>
+    <string name="current_strength">当前强度:%1$d</string>
+    <string name="search_wifi">搜索wifi</string>
 </resources>

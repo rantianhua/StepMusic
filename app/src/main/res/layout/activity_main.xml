@@ -2,11 +2,54 @@
     xmlns:tools="http://schemas.android.com/tools" android:layout_width="match_parent"
     android:layout_height="match_parent" tools:context=".MainActivity">
 
-    <Button android:text="@string/play_url_music"
+    <Button
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:text="@string/search_wifi"
+        android:id="@+id/btn_search_wifi"
+        />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/rl_info"
+        android:padding="16dp"
+        android:layout_below="@+id/btn_search_wifi">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="5dp"
+            android:text="@string/current_wifi"
+            android:id="@+id/tv_current_wifi"
+            />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:text="@string/current_strength"
+            android:id="@+id/tv_current_strength"
+            />
+
+    </RelativeLayout>
+
+    <ListView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/listview"
+        android:layout_alignParentBottom="true"
+        android:layout_below="@+id/rl_info"
+        />
+
+    <ProgressBar
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_centerHorizontal="true"
+        style="?android:progressBarStyle"
+        android:id="@+id/pb_loading"
         android:layout_centerVertical="true"
-        android:onClick="playUrlMusic"/>
+        android:layout_centerHorizontal="true"
+        android:visibility="invisible"
+        />
 
 </RelativeLayout>
