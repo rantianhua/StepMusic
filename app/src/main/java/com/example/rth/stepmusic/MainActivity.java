@@ -1,18 +1,26 @@
 package com.example.rth.stepmusic;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.ComponentName;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.net.wifi.ScanResult;
+import android.net.wifi.WifiConfiguration;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Bundle;
 import android.os.Looper;
+import android.preference.DialogPreference;
 import android.text.TextUtils;
+import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.SimpleAdapter;
@@ -44,6 +52,13 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
     private static final Handler mainHan = new Handler(Looper.myLooper());  //接收异步消息
     private List<Map<String,String>> listData = new ArrayList<>();  //listView的数据源
 
+    private String wifiPass;   //wifi密码
+    private int wifiPassType;      //wifi加密类型
+    private ScanResult connScannResult; //要连接的wifi
+    private AlertDialog passAlert;  //获取wifi密码的弹出框
+    private View cusAlertView;  //自定义的弹出框view
+    private boolean reconnect = true;  //标识要不要连接新的wifi
+
     //MywifiManager的回调接口
     private final MyWifiManager.CallBack wifiCallback = new MyWifiManager.CallBack() {
         @Override
@@ -54,7 +69,23 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
         @Override
         public void rssiChanged(int rssi) {
             //rssi值发生变化
-            tvWifiSsid.setText(getString(R.string.current_strength,rssi));
+            tvWifiSsid.setText(getString(R.string.current_strength, rssi));
+            if(rssi <= 2) {
+                //换其他的wifi去连接,先重新搜索一便
+                if(reconnect) {
+                    searchWifi();
+                }
+            }
+        }
+
+        @Override
+        public void wifiChanged(String ssid) {
+            if(ssid.contains("unknown")) {
+                tvWifiName.setText(getString(R.string.current_wifi,"正在连接..."));
+            }else {
+                reconnect = true;
+                tvWifiName.setText(getString(R.string.current_wifi,ssid));
+            }
         }
     };
 
@@ -82,6 +113,9 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
         progressBar = (ProgressBar) findViewById(R.id.pb_loading);
         tvWifiName.setText(getString(R.string.current_wifi, "NULL"));
         tvWifiSsid.setText(getString(R.string.current_strength,0));
+        passAlert = new AlertDialog.Builder(this).create();
+        cusAlertView = LayoutInflater.from(this).inflate(R.layout.pass_dialog,null);
+        passAlert.setView(cusAlertView);
         initEvent();
     }
 
@@ -107,6 +141,71 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
                 searchWifi();
             }
         });
+        //listview的点击事件
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+                //连接制定wifi
+                ScanResult wifi = results.get(i);
+                connectWifi(wifi);
+            }
+        });
+        //取消连接wifi
+        ((TextView)cusAlertView.findViewById(R.id.pass_dialog_cancel)).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                wifiPass = null;
+                passAlert.dismiss();
+            }
+        });
+        //取得wifi密码并连接
+        ((TextView)cusAlertView.findViewById(R.id.pass_dialog_sure)).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                wifiPass = ((EditText)cusAlertView.findViewById(R.id.pass_dialog_et_pass)).getText().toString();
+                passAlert.dismiss();
+                myWifiManager.connectWifi(connScannResult,wifiPass,wifiPassType);
+            }
+        });
+    }
+
+    /**
+     * 连接指定的wifi
+     * @param wifi 要连接的wifi
+     */
+    private void connectWifi(ScanResult wifi) {
+        if(TextUtils.isEmpty(wifi.SSID)) {
+            Toast.makeText(this,"该wifi被隐藏了",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if(myWifiManager.getConnectWifiName().equals(wifi.SSID)) {
+            Toast.makeText(this,wifi.SSID + "已连接",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        //检查该wifi有没有配置过
+        WifiConfiguration configuration = myWifiManager.haveConfiguration(wifi);
+        if(configuration != null) {
+            //已经配置过了,直接连接
+            myWifiManager.connectWifi(configuration);
+            return;
+        }
+        //先检查加密类型类型
+        String keyMethod = wifi.capabilities;
+        if(keyMethod.contains("WPA") || keyMethod.contains("wpa")) {
+            wifiPassType = MyWifiManager.TYPE_WPA;
+        }else if(keyMethod.contains("WEP") || keyMethod.contains("wep")) {
+            wifiPassType = MyWifiManager.TYPE_WEP;
+        }else {
+            wifiPassType = MyWifiManager.TYPE_NONE;
+        }
+        if(wifiPassType != MyWifiManager.TYPE_NONE) {
+            //获取密码
+            connScannResult = wifi;
+            ((TextView)cusAlertView.findViewById(R.id.pass_dialog_title)).setText(wifi.SSID);
+            passAlert.show();
+        }else {
+            myWifiManager.connectWifi(wifi, null, wifiPassType);
+        }
     }
 
     /**
@@ -130,7 +229,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
                         for (int i = 0;i < results.size();i++) {
                             Map<String,String> data = new HashMap<String, String>();
                             String ssid = results.get(i).SSID;
-                            data.put("name",TextUtils.isEmpty(ssid) ? "unkown name" : ssid);
+                            data.put("name",TextUtils.isEmpty(ssid) ? "unknown name" : ssid);
                             listData.add(data);
                         }
                         if(adapter == null) {
@@ -139,6 +238,10 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
                             listView.setAdapter(adapter);
                         }else {
                             adapter.notifyDataSetChanged();
+                        }
+                        if(!results.get(0).SSID.equals(myWifiManager.getConnectWifiName()) && reconnect) {
+                            reconnect = false;
+                            connectWifi(results.get(0));
                         }
                     }else {
                         Toast.makeText(MainActivity.this,"未搜索到任何wifi", Toast.LENGTH_SHORT).show();

@@ -7,7 +7,6 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.text.TextUtils;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -36,22 +35,6 @@ public class MyWifiManager {
         context.registerReceiver(wifiReceiver,getIntentFilter());
     }
 
-    /**
-     * 比较两个热点名是否相同
-     * @param ssid1
-     * @param ssid2
-     * @return
-     */
-    public static boolean compareTwoSsid(String ssid1,String ssid2) {
-        //有的设备有双引号
-        ssid1 = ssid1.replaceAll("\"","");
-        ssid2 = ssid2.replaceAll("\"", "");
-        if(ssid1.equalsIgnoreCase(ssid2)) {
-            return true;
-        }
-        return false;
-    }
-
     //检查热点是否已经开启
     public boolean isWifiApEnabled() {
         try {
@@ -67,7 +50,12 @@ public class MyWifiManager {
     //获取当前热点的名称
     public String getConnectWifiName() {
         WifiInfo info = manager.getConnectionInfo();
-        return info == null ? "为连接" : info.getSSID();
+        String ssid = "未连接";
+        if(info != null) {
+            ssid = info.getSSID();
+            ssid = cutQuotations(ssid);
+        }
+        return ssid;
     }
 
     /**
@@ -130,121 +118,35 @@ public class MyWifiManager {
      */
     public void wifiConnected(String ssid) {
         if(callback != null) {
-            // callback.wifiApConnected(ssid);
+            ssid = cutQuotations(ssid);
+            callback.wifiChanged(ssid);
         }
     }
 
     /**
-     * 连接wifi热点
-     * @param ssid 热点名称
+     * 检查wifi是否已有连接,有则断开连接
      * @return
      */
-    public boolean connectAction(String ssid,String pwd) {
-        WifiConfiguration configuration = null;
-        //检查是否已经有连接过该热点
-        WifiConfiguration tempConfig = isExist(SSID);
-        if(tempConfig != null) {
-            //连接过，直接连接
-            Log.e("connectAction", "之前连接过");
-            configuration = tempConfig;
-        }else {
-            configuration = setUpWifiConfig(ssid,pwd);
-        }
-        if(configuration == null) {
-            return false;
-        }
-        //检查是否已有wifi连接上，有则断开连接，
-        isWifiConneted(true);
-        int netId = manager.addNetwork(configuration);
-        manager.enableNetwork(netId, true);
-        manager.reassociate();
-        return true;
-    }
-
-    /**
-     *
-     * @param ssid 要连接的wifi热点的名称
-     * @return true 如果检查出该热点已经连接上了
-     */
-    public boolean ssidConnected(String ssid) {
-        String connectedSSID = isWifiConneted(false);
-        if(!TextUtils.isEmpty(connectedSSID)) {
-            return compareTwoSsid(ssid,connectedSSID);
-        }
-        return false;
-    }
-
-    /**
-     * 检查wifi是否已有连接
-     * @param disConnect    //是否断开该连接
-     * @return
-     */
-    private String isWifiConneted(boolean disConnect) {
+    private void disconnectWifi() {
         WifiInfo info = manager.getConnectionInfo();
         if(info != null) {
+            //关闭该连接
             String ssid = info.getSSID();
-            if(disConnect) {
-                //关闭该连接
-                List<WifiConfiguration> configurations = manager.getConfiguredNetworks();
-                for(WifiConfiguration con : configurations) {
-                    if(compareTwoSsid(ssid,con.SSID)) {
-                        //关闭该wifi
-                        int netId = con.networkId;
-                        manager.disableNetwork(netId);
-                        manager.disconnect();
-                        break;
-                    }
+            List<WifiConfiguration> configurations = manager.getConfiguredNetworks();
+            for(WifiConfiguration con : configurations) {
+                if(ssid.equals(con.SSID)) {
+                    //关闭该wifi
+                    int netId = con.networkId;
+                    manager.disableNetwork(netId);
+                    manager.disconnect();
+                    break;
                 }
-                return null;
-            }else {
-                return ssid;
-            }
-        }else {
-            return null;
-        }
-    }
-
-    /**
-     * @param ssid 热点名称
-     * @return 存在的热点配置
-     */
-    private WifiConfiguration isExist(String ssid) {
-        List<WifiConfiguration> existingConfigs = manager.getConfiguredNetworks();
-        for (WifiConfiguration existingConfig : existingConfigs) {
-            if (compareTwoSsid(existingConfig.SSID,ssid)) {
-                return existingConfig;
             }
         }
-        return null;
     }
 
     /**
-     * @param ssid  the wifiAp's name
-     * @return WifiConfiguration
-     */
-    private WifiConfiguration setUpWifiConfig(String ssid,String pwd) {
-        WifiConfiguration configuration = new WifiConfiguration();
-        configuration.allowedAuthAlgorithms.clear();
-        configuration.allowedGroupCiphers.clear();
-        configuration.allowedKeyManagement.clear();
-        configuration.allowedPairwiseCiphers.clear();
-        configuration.allowedProtocols.clear();
-        configuration.SSID = "\"" + ssid + "\"";
-
-        configuration.preSharedKey = "\"" + pwd + "\"";
-        configuration.hiddenSSID = true;
-        configuration.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
-        configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
-        configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
-        configuration.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
-        // config.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
-        configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-        configuration.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
-        return configuration;
-    }
-
-    /**
-     * statrt scan wifi device
+     * 扫描周围wifi
      */
     public void startScan() {
         manager.startScan();
@@ -265,6 +167,92 @@ public class MyWifiManager {
                 }
             }
         return results;
+    }
+
+    /**
+     * 连接制定的wifi
+     * @param wifi 要连接的wifi
+     * @param pass  wifi密码
+     * @param type wifi加密类型
+     */
+    public void connectWifi(ScanResult wifi,String pass,int type) {
+        WifiConfiguration configuration = new WifiConfiguration();
+        configuration.allowedAuthAlgorithms.clear();
+        configuration.allowedGroupCiphers.clear();
+        configuration.allowedKeyManagement.clear();
+        configuration.allowedPairwiseCiphers.clear();
+        configuration.allowedProtocols.clear();
+        configuration.SSID = wifi.SSID;
+        switch (type) {
+            case TYPE_NONE:
+                configuration.wepKeys[0] = "";
+                configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                configuration.wepTxKeyIndex = 0;
+                break;
+            case TYPE_WEP:
+                configuration.hiddenSSID = true;
+                configuration.wepKeys[0] = "\"" + pass + "\"";
+                configuration.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.SHARED);
+                configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
+                configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
+                configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
+                configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP104);
+                configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                configuration.wepTxKeyIndex = 0;
+                break;
+            case TYPE_WPA:
+                configuration.preSharedKey = "\""+pass+"\"";
+                configuration.hiddenSSID = true;
+                configuration.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
+                configuration.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
+                configuration.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
+                configuration.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
+                configuration.allowedProtocols.set(WifiConfiguration.Protocol.WPA);
+                configuration.status = WifiConfiguration.Status.ENABLED;
+                break;
+        }
+        connectWifi(configuration);
+    }
+
+    /**
+     * 连接指定wifi,重载与{@connectWifi(ScanResult wifi,String pass,int type)}
+     * @param configuration
+     */
+    public void connectWifi(WifiConfiguration configuration) {
+        //检查是否已有wifi连接上，有则断开连接，
+        disconnectWifi();
+        int netId = manager.addNetwork(configuration);
+        manager.enableNetwork(netId, true);
+    }
+
+    /**
+     * 判断有没有配置过该连接
+     * @param wifi 待判断的wifi
+     * @return 配置过的Wificonfiguration,没有返回null
+     */
+    public WifiConfiguration haveConfiguration(ScanResult wifi) {
+        List<WifiConfiguration> configurations = manager.getConfiguredNetworks();
+        if(configurations != null) {
+            for (WifiConfiguration configuration : configurations) {
+                if(cutQuotations(configuration.SSID).equals(wifi.SSID)) {
+                    return configuration;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 去除ssid多余的双引号,便于比对
+     * @param ssid
+     * @return 去掉多余双引号后的ssid
+     */
+    private String cutQuotations(String ssid) {
+        if(ssid.startsWith("\"") && ssid.endsWith("\"")) {
+            ssid = ssid.substring(1);
+            ssid = ssid.substring(0,ssid.length()-1);
+        }
+        return ssid;
     }
 
     /**
@@ -307,6 +295,12 @@ public class MyWifiManager {
         callback.rssiChanged(level);
     }
 
+    //wifi加密类型
+    public static final int TYPE_NONE = 0;  //没有密码的类型
+    public static final int TYPE_WPA = 1;  //wpa加密
+    public static final int TYPE_WEP = 2;  //wep加密
+
+
     public interface CallBack {
 
         /**
@@ -319,6 +313,12 @@ public class MyWifiManager {
          * @param rssi
          */
         void rssiChanged(int rssi);
+
+        /**
+         * 连接的wifi改变了
+         * @param ssid
+         */
+        void wifiChanged(String ssid);
     }
 
 }

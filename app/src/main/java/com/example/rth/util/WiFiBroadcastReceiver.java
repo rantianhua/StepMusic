@@ -3,6 +3,7 @@ package com.example.rth.util;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 
 /**
@@ -32,15 +33,11 @@ public class WiFiBroadcastReceiver extends BroadcastReceiver{
                 myWifiManager.wifiDisable();
             }
         }else if(WifiManager.NETWORK_STATE_CHANGED_ACTION.equals(action)) {
-//            WifiInfo info = intent.getParcelableExtra(WifiManager.EXTRA_WIFI_INFO);
-//            NetworkInfo networkInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
-//            if(networkInfo != null && networkInfo.isConnected()) {
-//                String ssid = info.getSSID();
-//                if (ssid != null) {
-//                    ssid = ssid.replaceAll("\"","");
-//                    service.wifiConnected(ssid);
-//                }
-//            }
+            WifiInfo info = intent.getParcelableExtra(WifiManager.EXTRA_WIFI_INFO);
+            if(info != null) {
+                //连接了新的wifi
+                myWifiManager.wifiConnected(info.getSSID());
+            }
         }else if(WifiManager.RSSI_CHANGED_ACTION.equals(action)) {
             //rssi值发生生变化
             int newRssi = intent.getIntExtra(WifiManager.EXTRA_NEW_RSSI,0);
