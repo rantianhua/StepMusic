@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.ComponentName;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.net.wifi.ScanResult;
@@ -13,9 +12,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Bundle;
 import android.os.Looper;
-import android.preference.DialogPreference;
 import android.text.TextUtils;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AdapterView;
@@ -29,6 +26,7 @@ import android.widget.Toast;
 
 import com.example.rth.serviecs.MusicServices;
 import com.example.rth.util.MyWifiManager;
+import com.example.rth.util.utils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -58,6 +56,9 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
     private AlertDialog passAlert;  //获取wifi密码的弹出框
     private View cusAlertView;  //自定义的弹出框view
     private boolean reconnect = true;  //标识要不要连接新的wifi
+    private boolean needPlayMusic = false;  //标识需不需要播放音乐
+    private String playUrl; //需要播放音乐的链接
+    private boolean isPlaying = false;  //标识是否正在播放音乐
 
     //MywifiManager的回调接口
     private final MyWifiManager.CallBack wifiCallback = new MyWifiManager.CallBack() {
@@ -70,7 +71,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
         public void rssiChanged(int rssi) {
             //rssi值发生变化
             tvWifiSsid.setText(getString(R.string.current_strength, rssi));
-            if(rssi <= 2) {
+            if(rssi <= 4) {
                 //换其他的wifi去连接,先重新搜索一便
                 if(reconnect) {
                     searchWifi();
@@ -85,6 +86,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
             }else {
                 reconnect = true;
                 tvWifiName.setText(getString(R.string.current_wifi,ssid));
+                playMusic(ssid);
             }
         }
     };
@@ -96,23 +98,17 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         initView();
-        myWifiManager = new MyWifiManager(this);
-        myWifiManager.setCallBack(wifiCallback);
-        wifiOpened = myWifiManager.isWifiEnable();
         //绑定服务
         bindService(new Intent(this, MusicServices.class), this, BIND_AUTO_CREATE);
     }
 
     private void initView() {
         pd = new ProgressDialog(this);
-        pd.setMessage("正在加载网络音乐...");
         tvWifiName = (TextView) findViewById(R.id.tv_current_wifi);
         tvWifiSsid = (TextView) findViewById(R.id.tv_current_strength);
         listView = (ListView) findViewById(R.id.listview);
         btnSearchWifi = (Button) findViewById(R.id.btn_search_wifi);
         progressBar = (ProgressBar) findViewById(R.id.pb_loading);
-        tvWifiName.setText(getString(R.string.current_wifi, "NULL"));
-        tvWifiSsid.setText(getString(R.string.current_strength,0));
         passAlert = new AlertDialog.Builder(this).create();
         cusAlertView = LayoutInflater.from(this).inflate(R.layout.pass_dialog,null);
         passAlert.setView(cusAlertView);
@@ -122,12 +118,44 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
     @Override
     protected void onStart() {
         super.onStart();
+        if(myWifiManager == null) {
+            myWifiManager = new MyWifiManager(this);
+            myWifiManager.setCallBack(wifiCallback);
+        }
+        wifiOpened = myWifiManager.isWifiEnable();
         if(!wifiOpened) {
             //开启wifi
             myWifiManager.startWifi();
         }else {
             String apName = myWifiManager.getConnectWifiName();
-            tvWifiName.setText(getString(R.string.current_wifi,TextUtils.isEmpty(apName) ? "未知热点" : apName));
+            tvWifiName.setText(getString(R.string.current_wifi, TextUtils.isEmpty(apName) ? "未知热点" : apName));
+            if(!isPlaying) {
+                playMusic(apName);
+            }
+        }
+    }
+
+    /**
+     * 根据wifi名称播放不同音乐
+     * @param ssid
+     */
+    private void playMusic(String ssid) {
+        if(ssid.contains("young")) {
+            pd.setMessage("正在加载清风徐来...");
+            playUrl = utils.wind_url;
+            if(musicServices != null) {
+                musicServices.requirePlay(playUrl);
+            }else {
+                needPlayMusic = true;
+            }
+        }else if(ssid.contains("ING")) {
+            playUrl = utils.shaPoLang;
+            pd.setMessage("正在加载杀破狼...");
+            if(musicServices != null) {
+                musicServices.requirePlay(playUrl);
+            }else {
+                needPlayMusic = true;
+            }
         }
     }
 
@@ -218,59 +246,38 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
             mainHan.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    if(progressBar.getVisibility() == View.VISIBLE) {
+                    if (progressBar.getVisibility() == View.VISIBLE) {
                         progressBar.setVisibility(View.INVISIBLE);
                     }
                     //获取搜索结果
                     results = myWifiManager.getScanResults();
                     //更新listView的数据
-                    if(results.size() > 1) {
+                    if (results.size() > 1) {
                         listData.clear();
-                        for (int i = 0;i < results.size();i++) {
-                            Map<String,String> data = new HashMap<String, String>();
+                        for (int i = 0; i < results.size(); i++) {
+                            Map<String, String> data = new HashMap<String, String>();
                             String ssid = results.get(i).SSID;
-                            data.put("name",TextUtils.isEmpty(ssid) ? "unknown name" : ssid);
+                            data.put("name", TextUtils.isEmpty(ssid) ? "unknown name" : ssid);
                             listData.add(data);
                         }
-                        if(adapter == null) {
-                            adapter = new SimpleAdapter(MainActivity.this,listData,android.R.layout.simple_list_item_1,
-                                    new String[]{"name"},new int[]{android.R.id.text1});
+                        if (adapter == null) {
+                            adapter = new SimpleAdapter(MainActivity.this, listData, android.R.layout.simple_list_item_1,
+                                    new String[]{"name"}, new int[]{android.R.id.text1});
                             listView.setAdapter(adapter);
-                        }else {
+                        } else {
                             adapter.notifyDataSetChanged();
                         }
-                        if(!results.get(0).SSID.equals(myWifiManager.getConnectWifiName()) && reconnect) {
+                        if (!results.get(0).SSID.equals(myWifiManager.getConnectWifiName()) && reconnect) {
                             reconnect = false;
                             connectWifi(results.get(0));
                         }
-                    }else {
-                        Toast.makeText(MainActivity.this,"未搜索到任何wifi", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "未搜索到任何wifi", Toast.LENGTH_SHORT).show();
                     }
                 }
-            },500);
+            }, 500);
         } else {
             Toast.makeText(MainActivity.this, "wifi正在开启,请稍后", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    /**
-     * 播放网络音乐
-     * @param view
-     */
-    public void playUrlMusic(View view) {
-        if(musicServices == null) {
-            Toast.makeText(this,"服务未绑定，请稍候！",Toast.LENGTH_SHORT).show();{
-        myWifiManager.unBindBroadcast();
-        super.onDestroy();
-        unbindService(this);
-    }
-        }else {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    musicServices.playUrl("http://stepmusics-library.stor.sinaapp.com/%E6%AD%BB%E4%BA%86%E9%83%BD%E8%A6%81%E7%88%B1%20-%20%E4%BF%A1%E4%B9%90%E5%9B%A2.mp3");
-                }
-            }).start();
         }
     }
 
@@ -278,6 +285,10 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
     public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
         musicServices = ((MusicServices.LocalMusicBinder)iBinder).getService();
         musicServices.setCallbackInMusicService(this);
+        if(needPlayMusic) {
+            needPlayMusic = false;
+            musicServices.requirePlay(playUrl);
+        }
     }
 
     @Override
@@ -300,12 +311,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
      */
     @Override
     public void preparingMusic() {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                pd.show();
-            }
-        });
+        pd.show();
     }
 
     /**
@@ -314,13 +320,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
      */
     @Override
     public void startPlay() {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if(pd.isShowing()) {
-                    pd.dismiss();
-                }
-            }
-        });
+        pd.dismiss();
+        isPlaying = true;
     }
 }
