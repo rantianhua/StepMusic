@@ -57,7 +57,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
     private View cusAlertView;  //自定义的弹出框view
     private boolean reconnect = true;  //标识要不要连接新的wifi
     private boolean needPlayMusic = false;  //标识需不需要播放音乐
-    private String playUrl; //需要播放音乐的链接
+    private String playSSid; //需要播放音乐的wifi
     private boolean isPlaying = false;  //标识是否正在播放音乐
 
     //MywifiManager的回调接口
@@ -71,7 +71,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
         public void rssiChanged(int rssi) {
             //rssi值发生变化
             tvWifiSsid.setText(getString(R.string.current_strength, rssi));
-            if(rssi <= 4) {
+            if(rssi <= 3) {
                 //换其他的wifi去连接,先重新搜索一便
                 if(reconnect) {
                     searchWifi();
@@ -140,22 +140,11 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
      * @param ssid
      */
     private void playMusic(String ssid) {
-        if(ssid.contains("young")) {
-            pd.setMessage("正在加载清风徐来...");
-            playUrl = utils.wind_url;
-            if(musicServices != null) {
-                musicServices.requirePlay(playUrl);
-            }else {
-                needPlayMusic = true;
-            }
-        }else if(ssid.contains("ING")) {
-            playUrl = utils.shaPoLang;
-            pd.setMessage("正在加载杀破狼...");
-            if(musicServices != null) {
-                musicServices.requirePlay(playUrl);
-            }else {
-                needPlayMusic = true;
-            }
+        playSSid = ssid;
+        if(musicServices != null) {
+            musicServices.requirePlay(playSSid);
+        }else {
+            needPlayMusic = true;
         }
     }
 
@@ -196,6 +185,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
             }
         });
     }
+
 
     /**
      * 连接指定的wifi
@@ -287,7 +277,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
         musicServices.setCallbackInMusicService(this);
         if(needPlayMusic) {
             needPlayMusic = false;
-            musicServices.requirePlay(playUrl);
+            musicServices.requirePlay(playSSid);
         }
     }
 
@@ -311,6 +301,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
      */
     @Override
     public void preparingMusic() {
+        pd.setMessage("正在加载新的音乐...");
         pd.show();
     }
 
@@ -322,5 +313,26 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
     public void startPlay() {
         pd.dismiss();
         isPlaying = true;
+    }
+
+    /**
+     * 在MusicService中回调
+     * @param flag    0表示开始加载,1表示加载完毕,2表示加载信息失败
+     */
+    @Override
+    public void loadingData(int flag) {
+        if(flag == 0) {
+            pd.setMessage("正在加载热点资源...");
+            pd.show();
+        }else if(flag == 1) {
+            if(pd.isShowing()) {
+                pd.dismiss();
+            }
+        }else if(flag == 2) {
+            if(pd.isShowing()) {
+                pd.dismiss();
+            }
+            Toast.makeText(MainActivity.this, "未获取到热点信息", Toast.LENGTH_SHORT).show();
+        }
     }
 }

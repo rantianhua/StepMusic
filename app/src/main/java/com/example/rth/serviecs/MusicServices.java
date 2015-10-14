@@ -11,6 +11,25 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.text.TextUtils;
+import android.util.Log;
+
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+import com.example.rth.util.MusicData;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Created by rth on 15-10-4.
@@ -19,6 +38,10 @@ import android.os.Message;
 public class MusicServices extends Service implements Handler.Callback{
 
     private MediaPlayer player; //音乐播放器
+    //记录要播放的音乐信息
+    private Map<String,MusicData> musicDatas = new HashMap<>();
+    //volley的网络请求队列
+    private RequestQueue queue;
     //网络流媒体的缓冲监听
     private final MediaPlayer.OnBufferingUpdateListener bufferingUpdateListener = new MediaPlayer.OnBufferingUpdateListener() {
         @Override
@@ -56,12 +79,16 @@ public class MusicServices extends Service implements Handler.Callback{
     //接收异步在工作线程处理
     private HandlerThread backWork;
     private static Handler workHan;
+    //后台接口
+    private static final String API_URL = "http://1.stepmusics.sinaapp.com/App/Api/getplaydata.php?ssid=";
+    private MusicData playData; //正在播放的音乐信息
 
     @Override
     public void onCreate() {
         super.onCreate();
         initMediaPlayer();
         mHan = new Handler(Looper.myLooper(),this);
+        queue = Volley.newRequestQueue(this);
         //开启工作线程
         backWork = new HandlerThread("music_work");
         backWork.start();
@@ -112,17 +139,70 @@ public class MusicServices extends Service implements Handler.Callback{
 
     /**
      * 请求播放网络音乐
-     * @param url 网络音乐地址
+     * @param ssid 当前连接的wifimingch
      */
-    public void requirePlay(String url) {
-        workHan.obtainMessage(REQUERY_PLAY,-1,-1,url).sendToTarget();
+    public void requirePlay(String ssid) {
+        workHan.obtainMessage(REQUERY_PLAY,-1,-1,ssid).sendToTarget();
+    }
+
+    /**
+     * 获取要播放音乐的链接
+     * @param ssid  当前链接的wifi名称
+     */
+    private void getPlayUrl(String ssid) {
+        String playUrl = null;
+        MusicData data = null;
+        try {
+            data = musicDatas.get(ssid);
+        }catch (Exception e) {
+            data = null;
+        }
+        if (data != null) {
+            //本地有缓存
+            playData = data;
+            playUrl(data.musicUrl);
+        }else {
+            Log.e("开始获取热点信息", ssid);
+            //从网络加载
+            StringRequest request = new StringRequest(Request.Method.GET, API_URL + ssid, new Response.Listener<String>() {
+                @Override
+                public void onResponse(String response) {
+                    mHan.obtainMessage(LOADED_DATA,-1,-1).sendToTarget();
+                    if(!TextUtils.isEmpty(response)) {
+                        try {
+                            JSONObject message = new JSONObject(response);
+                            MusicData musicData = new MusicData();
+                            musicData.wifiName = message.getString("name");
+                            musicData.range = message.getInt("range");
+                            musicData.musicUrl = message.getString("music_url");
+                            musicData.des = message.getString("description");
+                            musicDatas.put(musicData.wifiName,musicData);
+                            //播放音乐
+                            playData = musicData;
+                            playUrl(musicData.musicUrl);
+                        } catch (JSONException e) {
+                            mHan.obtainMessage(LOAD_FAILED,-1,-1).sendToTarget();
+                        }
+                    }
+                }
+            }, new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    Log.e("getPlayUrl","volley 加载出错"+error.getMessage());
+                    mHan.obtainMessage(LOAD_FAILED,-1,-1).sendToTarget();
+                }
+            });
+            mHan.obtainMessage(LOADING_DATA,-1,-1).sendToTarget();
+            queue.add(request);
+        }
     }
 
     /**
      * 播放网络音乐
-     * @param url 网络音乐的链接
+     * @param url 待播放音乐的链接
      */
     private void playUrl(String url) {
+        Log.e("url is ",url);
         try {
             mHan.obtainMessage(LOAD_MUSIC,-1,-1).sendToTarget();
             player.reset();
@@ -132,7 +212,6 @@ public class MusicServices extends Service implements Handler.Callback{
             e.printStackTrace();
         }
     }
-
 
     @Override
     public void onDestroy() {
@@ -157,6 +236,9 @@ public class MusicServices extends Service implements Handler.Callback{
     private static final int LOADED_MUSIC = 2;    //网络音乐已经加载
     private static final int START_PLAY = 3;    //开始播放网络音乐
     private static final int STOP_PLAY = 4; //停止播放音乐
+    private static final int LOADING_DATA = 5; //正在加载热点信息
+    private static final int LOADED_DATA = 6; //热点信息加载完毕
+    private static final int LOAD_FAILED = 7; //获取热点信息失败
     /**
      * 接收Handler发送的消息并处理
      * @param message
@@ -166,7 +248,7 @@ public class MusicServices extends Service implements Handler.Callback{
     public boolean handleMessage(Message message) {
         switch (message.what) {
             case REQUERY_PLAY:
-                playUrl((String)message.obj);
+                getPlayUrl((String) message.obj);
                 return true;
             case LOAD_MUSIC:
                 if(callbackInMusicService != null) callbackInMusicService.preparingMusic();
@@ -180,6 +262,15 @@ public class MusicServices extends Service implements Handler.Callback{
                 return true;
             case STOP_PLAY:
                 stop();
+                return true;
+            case LOADING_DATA:
+                if (callbackInMusicService != null) callbackInMusicService.loadingData(0);
+                return true;
+            case LOADED_DATA:
+                if (callbackInMusicService != null) callbackInMusicService.loadingData(1);
+                return true;
+            case LOAD_FAILED:
+                if (callbackInMusicService != null) callbackInMusicService.loadingData(2);
                 return true;
         }
         return false;
@@ -204,5 +295,11 @@ public class MusicServices extends Service implements Handler.Callback{
          * 开始播放音乐
          */
         void startPlay();
+
+        /**
+         * 正在加载热点信息
+         * @param flag    0表示开始加载,1表示加载完毕,2表示加载信息失败
+         */
+        void loadingData(int flag);
     }
 }
