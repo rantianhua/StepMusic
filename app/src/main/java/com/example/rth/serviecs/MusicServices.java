@@ -2,6 +2,8 @@ package com.example.rth.serviecs;
 
 import android.app.Service;
 import android.content.Intent;
+import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Binder;
@@ -25,10 +27,8 @@ import com.example.rth.util.MusicData;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.AbstractList;
-import java.util.ArrayList;
+import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -40,6 +40,8 @@ public class MusicServices extends Service implements Handler.Callback{
     private MediaPlayer player; //音乐播放器
     //记录要播放的音乐信息
     private Map<String,MusicData> musicDatas = new HashMap<>();
+    //测试用的音乐信息
+    private Map<String,String> testMusicDatas = new HashMap<>();
     //volley的网络请求队列
     private RequestQueue queue;
     //网络流媒体的缓冲监听
@@ -82,6 +84,8 @@ public class MusicServices extends Service implements Handler.Callback{
     //后台接口
     private static final String API_URL = "http://1.stepmusics.sinaapp.com/App/Api/getplaydata.php?ssid=";
     private MusicData playData; //正在播放的音乐信息
+    //assets资源管理器
+    private AssetManager assetManager;
 
     @Override
     public void onCreate() {
@@ -93,6 +97,7 @@ public class MusicServices extends Service implements Handler.Callback{
         backWork = new HandlerThread("music_work");
         backWork.start();
         workHan = new Handler(backWork.getLooper(),this);
+        assetManager = getAssets();
     }
 
     /**
@@ -103,6 +108,13 @@ public class MusicServices extends Service implements Handler.Callback{
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
         player.setOnBufferingUpdateListener(bufferingUpdateListener);
         player.setOnPreparedListener(preparedListener);
+        //测试添加一些音乐
+        testMusicDatas.put("Nidhogg", "Strip It Down.m4a");
+        testMusicDatas.put("20.0", "Strip It Down.m4a");
+        testMusicDatas.put("720", "What Do You Mean_.m4a");
+        testMusicDatas.put("30.0","What Do You Mean_.m4a");
+        testMusicDatas.put("50.0", "Do not Speak.m4a");
+
     }
 
     /**
@@ -139,10 +151,10 @@ public class MusicServices extends Service implements Handler.Callback{
 
     /**
      * 请求播放网络音乐
-     * @param ssid 当前连接的wifimingch
+     * @param key 目标音乐的键值
      */
-    public void requirePlay(String ssid) {
-        workHan.obtainMessage(REQUERY_PLAY,-1,-1,ssid).sendToTarget();
+    public void requirePlay(String key) {
+        workHan.obtainMessage(REQUERY_PLAY,-1,-1,key).sendToTarget();
     }
 
     /**
@@ -150,6 +162,7 @@ public class MusicServices extends Service implements Handler.Callback{
      * @param ssid  当前链接的wifi名称
      */
     private void getPlayUrl(String ssid) {
+
         String playUrl = null;
         MusicData data = null;
         try {
@@ -213,6 +226,22 @@ public class MusicServices extends Service implements Handler.Callback{
         }
     }
 
+    /**
+     * 播放本地资源里的音乐
+     * @param afd
+     */
+    private void playUrl(AssetFileDescriptor afd) {
+        try {
+            mHan.obtainMessage(LOAD_MUSIC,-1,-1).sendToTarget();
+            player.reset();
+            player.setDataSource(afd.getFileDescriptor(),afd.getStartOffset(),
+                    afd.getLength());
+            player.prepare();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -248,7 +277,8 @@ public class MusicServices extends Service implements Handler.Callback{
     public boolean handleMessage(Message message) {
         switch (message.what) {
             case REQUERY_PLAY:
-                getPlayUrl((String) message.obj);
+                playLcalMusic((String) message.obj);
+                //getPlayUrl((String) message.obj);
                 return true;
             case LOAD_MUSIC:
                 if(callbackInMusicService != null) callbackInMusicService.preparingMusic();
@@ -274,6 +304,20 @@ public class MusicServices extends Service implements Handler.Callback{
                 return true;
         }
         return false;
+    }
+
+    /**
+     * 播放本地存储的音乐
+     * @param obj 目标音乐对应的键值
+     */
+    private void playLcalMusic(String obj) {
+        String musicName = testMusicDatas.get(obj);
+        try {
+            AssetFileDescriptor afd = assetManager.openFd(musicName);
+            playUrl(afd);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override

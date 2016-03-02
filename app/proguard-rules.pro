@@ -15,3 +15,9 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+
+#2D地图
+ -keep class com.amap.api.maps2d.**{*;}
+ -keep class com.amap.api.mapcore2d.**{*;}
+ #搜索
+ -keep   class com.amap.api.services.**{*;}

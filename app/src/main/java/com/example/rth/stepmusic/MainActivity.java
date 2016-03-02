@@ -26,7 +26,6 @@ import android.widget.Toast;
 
 import com.example.rth.serviecs.MusicServices;
 import com.example.rth.util.MyWifiManager;
-import com.example.rth.util.utils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -265,7 +264,7 @@ public class MainActivity extends Activity implements ServiceConnection,MusicSer
                         Toast.makeText(MainActivity.this, "未搜索到任何wifi", Toast.LENGTH_SHORT).show();
                     }
                 }
-            }, 500);
+            }, 1000);
         } else {
             Toast.makeText(MainActivity.this, "wifi正在开启,请稍后", Toast.LENGTH_SHORT).show();
         }

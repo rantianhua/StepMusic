@@ -6,4 +6,6 @@
     <string name="current_wifi">当前无线:%1$s</string>
     <string name="current_strength">当前强度:%1$d</string>
     <string name="search_wifi">搜索wifi</string>
+    <string name="controll_locate_pause">暂停</string>
+    <string name="controll_locate_continue">继续</string>
 </resources>

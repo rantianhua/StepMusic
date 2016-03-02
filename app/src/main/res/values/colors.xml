@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="indigo_500">#3F51B5</color>
+    <color name="indigo_700">#303f9f</color>
+    <color name="indigo_50">#eBeaf6</color>
+    <color name="pink_500">#FF4081</color>
+    <color name="gray_300">#e0e0e0</color>
+    <color name="gray_400">#bdbdbd</color>
+</resources>
