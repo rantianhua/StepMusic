@@ -30,6 +30,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 /**
  * Created by rth on 15-10-4.
@@ -311,7 +312,30 @@ public class MusicServices extends Service implements Handler.Callback{
      * @param obj 目标音乐对应的键值
      */
     private void playLcalMusic(String obj) {
+        //随机生成一个音乐
+        Random random = new Random();
+        int in = random.nextInt(4);
+        switch (in) {
+            case 0:
+                obj = "Nidhogg";
+                break;
+            case 1:
+                obj = "20.0";
+                break;
+            case 2:
+                obj = "720";
+                break;
+            case 3:
+                obj = "30.0";
+                break;
+            default:
+                obj = "50.0";
+                break;
+        }
         String musicName = testMusicDatas.get(obj);
+        if(TextUtils.isEmpty(musicName)) {
+            return;
+        }
         try {
             AssetFileDescriptor afd = assetManager.openFd(musicName);
             playUrl(afd);
